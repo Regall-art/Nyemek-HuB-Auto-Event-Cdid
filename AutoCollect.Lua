@@ -1,90 +1,108 @@
--- NYEMEK HUB | CDID BYPASS TELEPORT
+--[[ 
+    NYEMEK HUB | CDID ULTIMATE BYPASS
+    - Hard Pivot Teleport (Memaksa Perpindahan)
+    - Anti-Anchor Character (Mencegah Karakter Stuck)
+    - Auto Collect FireTouch
+]]
+
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local root = character:WaitForChild("HumanoidRootPart")
 
--- FUNGSI BYPASS: Mematikan deteksi jatuh & tabrakan
-local function BypassPhysics(char)
-    for _, part in pairs(char:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.CanCollide = false
-        end
+-- Folder Path
+local eventFolder = workspace:FindFirstChild("Event")
+local angpaoFolder = eventFolder and eventFolder:FindFirstChild("AngpaoFolder")
+
+local isFarming = false
+
+-- FUNGSI TELEPORT PALING KERAS (FORCE PIVOT)
+local function ForceTeleport(target)
+    if not character or not target then return end
+    
+    -- Memastikan karakter tidak ter-anchor (dikunci game)
+    for _, v in pairs(character:GetDescendants()) do
+        if v:IsA("BasePart") then v.Anchored = false end
     end
+    
+    -- Memindahkan karakter tepat ke posisi Angpao
+    character:PivotTo(target.CFrame * CFrame.new(0, 2, 0))
+    
+    -- Menghilangkan kecepatan agar tidak terpental balik
+    root.Velocity = Vector3.new(0,0,0)
+    root.RotVelocity = Vector3.new(0,0,0)
 end
 
--- FUNGSI TWEEN BYPASS (Agar tidak rubberband)
-local function BypassTeleport(targetPart)
-    local char = player.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not root or not targetPart then return end
+-- LOGIKA AUTO QUEST
+local function StartQuest(statusLabel, btn)
+    if not angpaoFolder then
+        statusLabel.Text = "❌ Folder Angpao Tidak Ditemukan!"
+        return
+    end
 
-    -- Matikan Gravitasi agar tidak ditarik server saat pindah
-    local bv = Instance.new("BodyVelocity")
-    bv.Velocity = Vector3.new(0, 0, 0)
-    bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    bv.Parent = root
-
-    -- Tween Speed: Makin besar angkanya, makin cepat (Speed 600 stud/detik)
-    local distance = (root.Position - targetPart.Position).Magnitude
-    local tweenInfo = TweenInfo.new(distance / 600, Enum.EasingStyle.Linear)
-    
-    local tween = TweenService:Create(root, tweenInfo, {CFrame = targetPart.CFrame})
-    
-    -- Jalankan Noclip selama bergerak
-    local connection = RunService.Stepped:Connect(function()
-        BypassPhysics(char)
-    end)
-
-    tween:Play()
-    tween.Completed:Wait()
-    
-    connection:Disconnect()
-    bv:Destroy()
-end
-
--- LOGIKA UTAMA
-local function StartQuest()
-    local folder = workspace:FindFirstChild("Event") and workspace.Event:FindFirstChild("AngpaoFolder")
-    if not folder then return end
+    isFarming = true
+    btn.Text = "BERHENTIKAN"
+    btn.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
 
     for i = 1, 77 do
+        if not isFarming then break end
+        
         local modelName = "Angpao" .. i
-        local model = folder:FindFirstChild(modelName)
+        local model = angpaoFolder:FindFirstChild(modelName)
         
         if model then
+            -- Jalur: Model -> MeshPart -> Collect
             local meshPart = model:FindFirstChild(modelName)
             local collectPart = meshPart and meshPart:FindFirstChild("Collect")
             
             if collectPart then
-                -- Langkah 1: Bypass Teleport ke Lokasi
-                BypassTeleport(collectPart)
+                statusLabel.Text = "📍 Memaksa Ke: " .. modelName
                 
-                -- Langkah 2: Auto Collect Instan
-                task.wait(0.1)
+                -- Teleport Paksa
+                ForceTeleport(collectPart)
+                
+                -- Auto Collect
+                task.wait(0.3)
                 if firetouchinterest then
-                    firetouchinterest(player.Character.HumanoidRootPart, collectPart, 0)
-                    task.wait(0.05)
-                    firetouchinterest(player.Character.HumanoidRootPart, collectPart, 1)
+                    firetouchinterest(root, collectPart, 0)
+                    task.wait(0.1)
+                    firetouchinterest(root, collectPart, 1)
                 end
                 
-                -- Delay singkat antar Angpao (0.5 detik agar cepat seperti di video)
-                task.wait(0.5) 
+                task.wait(1.2) -- Jeda aman agar tidak kick
             end
+        else
+            -- Jika angpao belum ter-load (StreamingEnabled), kita tunggu sebentar
+            statusLabel.Text = "⏳ Menunggu Angpao " .. i .. " Muncul..."
+            task.wait(0.5)
         end
     end
+    
+    isFarming = false
+    statusLabel.Text = "✅ SELESAI!"
+    btn.Text = "MULAI AUTO QUEST"
+    btn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
 end
 
--- UI Tombol Sederhana
+-- UI SEDERHANA
 local ScreenGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
-local Btn = Instance.new("TextButton", ScreenGui)
-Btn.Size = UDim2.new(0, 200, 0, 50)
-Btn.Position = UDim2.new(0.5, -100, 0.1, 0)
-Btn.Text = "START BYPASS QUEST (5 MINS)"
-Btn.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
-Btn.TextColor3 = Color3.new(1,1,1)
+local Main = Instance.new("Frame", ScreenGui)
+Main.Size = UDim2.new(0, 300, 0, 150); Main.Position = UDim2.new(0.5, 0, 0.5, 0); Main.AnchorPoint = Vector2.new(0.5, 0.5)
+Main.BackgroundColor3 = Color3.fromRGB(25, 25, 25); Instance.new("UICorner", Main)
+local Stroke = Instance.new("UIStroke", Main); Stroke.Color = Color3.fromRGB(0, 255, 0); Stroke.Thickness = 2
 
-Btn.MouseButton1Click:Connect(function()
-    Btn.Text = "RUNNING..."
-    task.spawn(StartQuest)
+local Status = Instance.new("TextLabel", Main)
+Status.Size = UDim2.new(1, 0, 0, 50); Status.Position = UDim2.new(0, 0, 0, 30)
+Status.Text = "Status: Siap!"; Status.TextColor3 = Color3.new(1,1,1); Status.Font = "GothamBold"; Status.BackgroundTransparency = 1
+
+local StartBtn = Instance.new("TextButton", Main)
+StartBtn.Size = UDim2.new(0, 240, 0, 40); StartBtn.Position = UDim2.new(0.5, -120, 0, 90)
+StartBtn.Text = "MULAI AUTO QUEST"; StartBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 0); StartBtn.TextColor3 = Color3.new(1,1,1); StartBtn.Font = "GothamBold"; Instance.new("UICorner", StartBtn)
+
+StartBtn.MouseButton1Click:Connect(function()
+    if not isFarming then
+        task.spawn(function() StartQuest(Status, StartBtn) end)
+    else
+        isFarming = false
+    end
 end)
